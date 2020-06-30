@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System;
 using System.IO;
 using System.Threading.Tasks;
@@ -16,13 +15,23 @@ namespace azFunctionDemo
         [FunctionName("OnPaymentReceived")]
         public static async Task<IActionResult> Run(
             [HttpTrigger(AuthorizationLevel.Function, "post", Route = null)] HttpRequest req,
+            [Queue("orders")] IAsyncCollector<Order> orderQueue,
+            [Table("orders")] IAsyncCollector<Order> orderTable,
             ILogger log)
         {
             log.LogInformation("Received a payment.");
 
             string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-            dynamic data = JsonConvert.DeserializeObject(requestBody);
-            dynamic data1 = "1111";
+            var order = JsonConvert.DeserializeObject<Order>(requestBody);
+
+            await orderQueue.AddAsync(order);
+
+            order.PartitionKey = "orders";
+            order.RowKey = order.OrderId;
+
+            await orderTable.AddAsync(order);
+
+            log.LogInformation($"Order {order.OrderId} received from {order.Email} for product {order.ProductId}");
 
             return new OkObjectResult($"Thank you for your purchase");
         }
